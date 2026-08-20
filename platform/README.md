@@ -21,5 +21,6 @@ platform/
 kubectl kustomize platform/clusters/lab
 ```
 
-Die Datei `bootstrap/root-application/application.yaml.example` wird erst nach
-dem Eintragen der echten Git-Repository-URL aktiviert.
+Die Root-Application verwendet das private Repository
+`git@github.com:ElMed05/devsecops.git`. Ihre erste Synchronisierung bleibt
+bewusst manuell, damit der von Argo CD erkannte Diff vorab geprüft werden kann.

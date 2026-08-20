@@ -7,7 +7,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/REPLACE_ME/devsecops.git
+    repoURL: git@github.com:ElMed05/devsecops.git
     targetRevision: main
     path: platform/clusters/lab
   destination:

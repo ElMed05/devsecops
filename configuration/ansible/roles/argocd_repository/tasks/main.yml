@@ -1,0 +1,136 @@
+---
+- name: Check the local Argo CD deploy key
+  ansible.builtin.stat:
+    path: "{{ argocd_repository_deploy_key }}"
+  delegate_to: localhost
+  become: false
+  register: argocd_repository_deploy_key_stat
+
+- name: Require the local Argo CD deploy key
+  ansible.builtin.assert:
+    that:
+      - argocd_repository_deploy_key_stat.stat.exists
+      - argocd_repository_deploy_key_stat.stat.isreg
+    fail_msg: >-
+      The read-only Argo CD deploy key is missing at
+      {{ argocd_repository_deploy_key }}.
+
+- name: Configure the private Git repository in Argo CD
+  block:
+    - name: Copy the deploy key temporarily to the control plane
+      ansible.builtin.copy:
+        src: "{{ argocd_repository_deploy_key }}"
+        dest: "{{ argocd_repository_remote_key }}"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Render the Argo CD repository secret
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig={{ argocd_repository_kubeconfig }}
+          - --namespace={{ argocd_repository_namespace }}
+          - create
+          - secret
+          - generic
+          - "{{ argocd_repository_secret_name }}"
+          - --from-literal=type=git
+          - --from-literal=url={{ argocd_repository_url }}
+          - --from-literal=name={{ argocd_repository_name }}
+          - --from-file=sshPrivateKey={{ argocd_repository_remote_key }}
+          - --dry-run=client
+          - -o
+          - yaml
+      register: argocd_repository_secret_yaml
+      changed_when: false
+      no_log: true
+
+    - name: Write the repository secret manifest temporarily
+      ansible.builtin.copy:
+        content: "{{ argocd_repository_secret_yaml.stdout }}\n"
+        dest: "{{ argocd_repository_remote_manifest }}"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Apply the Argo CD repository secret
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig={{ argocd_repository_kubeconfig }}
+          - apply
+          - -f
+          - "{{ argocd_repository_remote_manifest }}"
+      register: argocd_repository_secret_apply
+      changed_when: >-
+        'created' in argocd_repository_secret_apply.stdout or
+        'configured' in argocd_repository_secret_apply.stdout
+      no_log: true
+
+    - name: Label the secret as an Argo CD repository
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig={{ argocd_repository_kubeconfig }}
+          - --namespace={{ argocd_repository_namespace }}
+          - label
+          - secret
+          - "{{ argocd_repository_secret_name }}"
+          - argocd.argoproj.io/secret-type=repository
+          - --overwrite
+      register: argocd_repository_secret_label
+      changed_when: "'not labeled' not in argocd_repository_secret_label.stdout"
+  always:
+    - name: Remove the temporary deploy key from the control plane
+      ansible.builtin.file:
+        path: "{{ argocd_repository_remote_key }}"
+        state: absent
+      no_log: true
+
+    - name: Remove the temporary repository manifest from the control plane
+      ansible.builtin.file:
+        path: "{{ argocd_repository_remote_manifest }}"
+        state: absent
+      no_log: true
+
+- name: Install the root Application manifest on the control plane
+  ansible.builtin.copy:
+    src: "{{ argocd_root_application_source }}"
+    dest: "{{ argocd_root_application_destination }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply the Argo CD root Application
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig={{ argocd_repository_kubeconfig }}
+      - apply
+      - -f
+      - "{{ argocd_root_application_destination }}"
+  register: argocd_root_application_apply
+  changed_when: >-
+    'created' in argocd_root_application_apply.stdout or
+    'configured' in argocd_root_application_apply.stdout
+
+- name: Read the root Application status
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig={{ argocd_repository_kubeconfig }}
+      - --namespace={{ argocd_repository_namespace }}
+      - get
+      - application
+      - lab-root
+      - -o
+      - wide
+  register: argocd_root_application_status
+  changed_when: false
+
+- name: Show the root Application status
+  ansible.builtin.debug:
+    var: argocd_root_application_status.stdout_lines

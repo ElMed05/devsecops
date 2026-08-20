@@ -15,7 +15,8 @@ roles/
 ├── cni_calico/                Calico CNI und NetworkPolicy
 ├── kubernetes_worker/         kurzlebiger kubeadm-Join und Worker-Label
 ├── helm/                      gepinnte Helm-Installation
-└── argocd_bootstrap/           initialer GitOps-Controller
+├── argocd_bootstrap/           initialer GitOps-Controller
+└── argocd_repository/          privates Git-Repository und Root-Application
 ```
 
 ```bash
@@ -68,6 +69,12 @@ erreicht werden:
 ```bash
 kubectl --kubeconfig artifacts/admin.conf -n argocd port-forward svc/argocd-server 8080:443
 ```
+
+Der private read-only Deploy-Key wird lokal unter
+`artifacts/argocd-devsecops-deploy-key` erwartet. Das gesamte
+`artifacts/`-Verzeichnis wird von Git ignoriert. Der Key wird bei der
+Konfiguration nur temporär auf die Control Plane kopiert und anschließend
+entfernt.
 
 ## Gateway
 

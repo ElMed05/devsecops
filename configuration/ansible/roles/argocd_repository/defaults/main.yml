@@ -1,0 +1,11 @@
+---
+argocd_repository_name: devsecops
+argocd_repository_url: git@github.com:ElMed05/devsecops.git
+argocd_repository_deploy_key: "{{ playbook_dir }}/../artifacts/argocd-devsecops-deploy-key"
+argocd_repository_kubeconfig: /etc/kubernetes/admin.conf
+argocd_repository_namespace: argocd
+argocd_repository_secret_name: repo-devsecops
+argocd_repository_remote_key: /run/argocd-devsecops-deploy-key
+argocd_repository_remote_manifest: /run/argocd-devsecops-repository.yaml
+argocd_root_application_source: "{{ playbook_dir }}/../../../platform/bootstrap/root-application/application.yaml"
+argocd_root_application_destination: /etc/kubernetes/addons/argocd/root-application.yaml
