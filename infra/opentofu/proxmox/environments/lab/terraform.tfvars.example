@@ -1,0 +1,48 @@
+proxmox_endpoint  = "https://192.168.0.58:8006/"
+proxmox_insecure  = true
+proxmox_node_name = "pve"
+proxmox_node_address = "192.168.0.58"
+template_vm_id    = 9000
+datastore_id      = "local-lvm"
+network_bridge    = "vmbr0"
+vlan_id           = null
+
+ipv4_gateway = null
+dns_servers = [
+  "192.168.0.1",
+  "1.1.1.1",
+]
+
+cloud_init_username = "ubuntu"
+ssh_public_keys = [
+  "ssh-ed25519 AAAA_REPLACE_WITH_YOUR_PUBLIC_KEY user@workstation",
+]
+
+kubernetes_vms = {
+  k8s-control-plane = {
+    vm_id        = 201
+    ipv4_address = "dhcp"
+    cpu_cores    = 2
+    memory_mb    = 2048
+    disk_size_gb = 32
+    role          = "control-plane"
+  }
+  k8s-worker-01 = {
+    vm_id        = 202
+    ipv4_address = "dhcp"
+    cpu_cores    = 2
+    memory_mb    = 2560
+    disk_size_gb = 40
+    role          = "worker"
+  }
+}
+
+enable_platform_vm = false
+platform_vm = {
+  name          = "platform-services"
+  vm_id         = 204
+  ipv4_address  = "192.168.0.204/24"
+  cpu_cores     = 8
+  memory_mb     = 16384
+  disk_size_gb  = 200
+}

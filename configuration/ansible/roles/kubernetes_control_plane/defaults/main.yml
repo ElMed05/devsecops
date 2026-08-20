@@ -1,0 +1,4 @@
+---
+kubernetes_admin_user: ubuntu
+kubernetes_admin_group: ubuntu
+kubernetes_admin_home: /home/ubuntu

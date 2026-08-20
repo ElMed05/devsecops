@@ -1,0 +1,9 @@
+---
+- name: Bootstrap the GitOps control plane
+  hosts: control_plane
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: argocd_bootstrap
+      tags: [argocd]

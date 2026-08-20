@@ -1,0 +1,56 @@
+---
+- name: Read the installed Helm version
+  ansible.builtin.command:
+    argv:
+      - "{{ helm_install_path }}"
+      - version
+      - --short
+  register: helm_installed_version
+  changed_when: false
+  failed_when: false
+
+- name: Install the pinned Helm version
+  when: helm_installed_version.rc != 0 or helm_version not in helm_installed_version.stdout
+  block:
+    - name: Create the Helm download directory
+      ansible.builtin.file:
+        path: "{{ helm_download_directory }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Download the Helm archive
+      ansible.builtin.get_url:
+        url: "https://get.helm.sh/helm-{{ helm_version }}-linux-{{ helm_architecture }}.tar.gz"
+        dest: "{{ helm_download_directory }}/helm-{{ helm_version }}-linux-{{ helm_architecture }}.tar.gz"
+        checksum: "sha256:{{ helm_archive_checksum }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Extract the Helm archive
+      ansible.builtin.unarchive:
+        src: "{{ helm_download_directory }}/helm-{{ helm_version }}-linux-{{ helm_architecture }}.tar.gz"
+        dest: "{{ helm_download_directory }}"
+        remote_src: true
+        creates: "{{ helm_download_directory }}/linux-{{ helm_architecture }}/helm"
+
+    - name: Install the Helm binary
+      ansible.builtin.copy:
+        src: "{{ helm_download_directory }}/linux-{{ helm_architecture }}/helm"
+        dest: "{{ helm_install_path }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+
+- name: Verify Helm access to the Kubernetes cluster
+  ansible.builtin.command:
+    argv:
+      - "{{ helm_install_path }}"
+      - list
+      - --all-namespaces
+      - --kubeconfig
+      - /etc/kubernetes/admin.conf
+  changed_when: false

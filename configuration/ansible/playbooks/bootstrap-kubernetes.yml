@@ -1,0 +1,51 @@
+---
+- name: Bootstrap the Kubernetes control plane
+  hosts: control_plane
+  become: true
+  gather_facts: true
+  roles:
+    - role: kubernetes_control_plane
+      tags: [control-plane]
+    - role: cni_calico
+      tags: [cni]
+
+- name: Join Kubernetes workers
+  hosts: workers
+  become: true
+  gather_facts: true
+  roles:
+    - role: kubernetes_worker
+      tags: [workers]
+
+- name: Verify the resulting cluster
+  hosts: control_plane
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Wait until all Kubernetes nodes are Ready
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig=/etc/kubernetes/admin.conf
+          - wait
+          - --for=condition=Ready
+          - nodes
+          - --all
+          - --timeout=300s
+      changed_when: false
+
+    - name: Read Kubernetes node status
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig=/etc/kubernetes/admin.conf
+          - get
+          - nodes
+          - -o
+          - wide
+      register: kubernetes_node_status
+      changed_when: false
+
+    - name: Show Kubernetes node status
+      ansible.builtin.debug:
+        var: kubernetes_node_status.stdout_lines

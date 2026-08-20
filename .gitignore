@@ -21,3 +21,26 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+configuration/ansible/artifacts/
+
+# Local credentials and environment-specific secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+admin.conf
+kubeconfig
+kubeconfig.*
+*.secret.yaml
+*.secret.yml

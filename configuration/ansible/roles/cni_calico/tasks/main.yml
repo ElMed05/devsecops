@@ -1,0 +1,97 @@
+---
+- name: Create Calico manifest directory
+  ansible.builtin.file:
+    path: "{{ calico_manifest_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download pinned Calico manifests
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/{{ item.source }}"
+    dest: "{{ calico_manifest_directory }}/{{ item.destination }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - source: v1_crd_projectcalico_org.yaml
+      destination: 00-crds.yaml
+    - source: tigera-operator.yaml
+      destination: 10-operator.yaml
+
+- name: Check whether Calico CRDs exist
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig=/etc/kubernetes/admin.conf
+      - get
+      - crd
+      - installations.operator.tigera.io
+  register: calico_crd
+  changed_when: false
+  failed_when: false
+
+- name: Create Calico CRDs
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig=/etc/kubernetes/admin.conf
+      - create
+      - -f
+      - "{{ calico_manifest_directory }}/00-crds.yaml"
+  when: calico_crd.rc != 0
+
+- name: Apply the Tigera operator
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig=/etc/kubernetes/admin.conf
+      - apply
+      - -f
+      - "{{ calico_manifest_directory }}/10-operator.yaml"
+  register: tigera_operator_apply
+  changed_when: "'configured' in tigera_operator_apply.stdout or 'created' in tigera_operator_apply.stdout"
+
+- name: Render the Calico installation resource
+  ansible.builtin.template:
+    src: installation.yaml.j2
+    dest: "{{ calico_manifest_directory }}/20-installation.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply the Calico installation resource
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig=/etc/kubernetes/admin.conf
+      - apply
+      - -f
+      - "{{ calico_manifest_directory }}/20-installation.yaml"
+  register: calico_installation_apply
+  changed_when: "'configured' in calico_installation_apply.stdout or 'created' in calico_installation_apply.stdout"
+
+- name: Wait for the Tigera operator
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig=/etc/kubernetes/admin.conf
+      - wait
+      - --namespace=tigera-operator
+      - --for=condition=Available
+      - deployment/tigera-operator
+      - --timeout=300s
+  changed_when: false
+
+- name: Wait until all Calico components are available
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig=/etc/kubernetes/admin.conf
+      - wait
+      - --for=condition=Available
+      - tigerastatus
+      - --all
+      - --timeout=300s
+  changed_when: false

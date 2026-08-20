@@ -1,0 +1,14 @@
+---
+- name: Preserve the configured hostname across cloud-init runs
+  ansible.builtin.copy:
+    dest: /etc/cloud/cloud.cfg.d/99-preserve-hostname.cfg
+    content: |-
+      preserve_hostname: true
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Set the hostname from the inventory name
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+    use: systemd

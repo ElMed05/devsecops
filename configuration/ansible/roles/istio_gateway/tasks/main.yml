@@ -1,0 +1,125 @@
+---
+- name: Create the Istio manifest directory
+  ansible.builtin.file:
+    path: "{{ istio_manifest_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Render the Istio control-plane values
+  ansible.builtin.template:
+    src: istiod-values.yaml.j2
+    dest: "{{ istio_manifest_directory }}/istiod-values.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+  register: istiod_values
+
+- name: Add the official Istio Helm repository
+  ansible.builtin.command:
+    argv: [helm, repo, add, istio, https://istio-release.storage.googleapis.com/charts, --force-update]
+  changed_when: false
+
+- name: Update the Istio Helm repository
+  ansible.builtin.command:
+    argv: [helm, repo, update, istio]
+  changed_when: false
+
+- name: Read the Istio base release
+  ansible.builtin.command:
+    argv: [helm, status, istio-base, --namespace, "{{ istio_namespace }}", --kubeconfig, "{{ istio_kubeconfig }}"]
+  register: istio_base_status
+  changed_when: false
+  failed_when: false
+
+- name: Install the Istio base chart
+  ansible.builtin.command:
+    argv: [helm, upgrade, --install, istio-base, istio/base, --version, "{{ istio_version }}", --namespace, "{{ istio_namespace }}", --create-namespace, --kubeconfig, "{{ istio_kubeconfig }}", --atomic, --timeout, 5m]
+  when: istio_base_status.rc != 0
+
+- name: Read the Istiod release
+  ansible.builtin.command:
+    argv: [helm, status, istiod, --namespace, "{{ istio_namespace }}", --kubeconfig, "{{ istio_kubeconfig }}"]
+  register: istiod_status
+  changed_when: false
+  failed_when: false
+
+- name: Install or update Istiod
+  ansible.builtin.command:
+    argv: [helm, upgrade, --install, istiod, istio/istiod, --version, "{{ istio_version }}", --namespace, "{{ istio_namespace }}", --values, "{{ istio_manifest_directory }}/istiod-values.yaml", --kubeconfig, "{{ istio_kubeconfig }}", --atomic, --timeout, 10m]
+  when: istiod_status.rc != 0 or istiod_values.changed
+
+- name: Wait for Istiod
+  ansible.builtin.command:
+    argv: [kubectl, "--kubeconfig={{ istio_kubeconfig }}", "--namespace={{ istio_namespace }}", rollout, status, deployment/istiod, --timeout=300s]
+  changed_when: false
+
+- name: Create the Istio gateway namespace
+  ansible.builtin.command:
+    argv: [kubectl, "--kubeconfig={{ istio_kubeconfig }}", create, namespace, "{{ istio_gateway_namespace }}"]
+  register: istio_gateway_namespace_create
+  changed_when: istio_gateway_namespace_create.rc == 0
+  failed_when: istio_gateway_namespace_create.rc != 0 and 'AlreadyExists' not in istio_gateway_namespace_create.stderr
+
+- name: Generate the Argo CD lab TLS private key
+  ansible.builtin.command:
+    argv: [openssl, genrsa, -out, "{{ istio_manifest_directory }}/argocd-lab.key", "2048"]
+    creates: "{{ istio_manifest_directory }}/argocd-lab.key"
+  no_log: true
+
+- name: Generate the Argo CD lab TLS certificate
+  ansible.builtin.command:
+    argv: [openssl, req, -x509, -new, -nodes, -key, "{{ istio_manifest_directory }}/argocd-lab.key", -sha256, -days, "825", -out, "{{ istio_manifest_directory }}/argocd-lab.crt", -subj, "/CN={{ argocd_gateway_hostname }}", -addext, "subjectAltName=DNS:{{ argocd_gateway_hostname }}"]
+    creates: "{{ istio_manifest_directory }}/argocd-lab.crt"
+
+- name: Render the gateway TLS secret
+  ansible.builtin.command:
+    argv: [kubectl, "--kubeconfig={{ istio_kubeconfig }}", --namespace, "{{ istio_gateway_namespace }}", create, secret, tls, "{{ argocd_gateway_tls_secret }}", "--cert={{ istio_manifest_directory }}/argocd-lab.crt", "--key={{ istio_manifest_directory }}/argocd-lab.key", --dry-run=client, -o, yaml]
+  register: argocd_gateway_tls_yaml
+  changed_when: false
+  no_log: true
+
+- name: Apply the gateway TLS secret
+  ansible.builtin.command:
+    argv: [kubectl, "--kubeconfig={{ istio_kubeconfig }}", apply, -f, -]
+    stdin: "{{ argocd_gateway_tls_yaml.stdout }}"
+  register: argocd_gateway_tls_apply
+  changed_when: "'configured' in argocd_gateway_tls_apply.stdout or 'created' in argocd_gateway_tls_apply.stdout"
+  no_log: true
+
+- name: Render the Argo CD Gateway API resources
+  ansible.builtin.template:
+    src: argocd-gateway.yaml.j2
+    dest: "{{ istio_manifest_directory }}/argocd-gateway.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply the Argo CD Gateway API resources
+  ansible.builtin.command:
+    argv: [kubectl, "--kubeconfig={{ istio_kubeconfig }}", apply, -f, "{{ istio_manifest_directory }}/argocd-gateway.yaml"]
+  register: argocd_gateway_apply
+  changed_when: "'configured' in argocd_gateway_apply.stdout or 'created' in argocd_gateway_apply.stdout"
+
+- name: Wait for the lab gateway deployment
+  ansible.builtin.command:
+    argv: [kubectl, "--kubeconfig={{ istio_kubeconfig }}", "--namespace={{ istio_gateway_namespace }}", rollout, status, deployment/lab-gateway-istio, --timeout=300s]
+  changed_when: false
+
+- name: Read the lab gateway service type
+  ansible.builtin.command:
+    argv: [kubectl, "--kubeconfig={{ istio_kubeconfig }}", "--namespace={{ istio_gateway_namespace }}", get, service/lab-gateway-istio, -o, "jsonpath={.spec.type}"]
+  register: istio_gateway_service_type
+  changed_when: false
+  failed_when: istio_gateway_service_type.stdout != 'NodePort'
+
+- name: Read the HTTPS NodePort
+  ansible.builtin.command:
+    argv: [kubectl, "--kubeconfig={{ istio_kubeconfig }}", "--namespace={{ istio_gateway_namespace }}", get, service/lab-gateway-istio, -o, "jsonpath={.spec.ports[?(@.port==443)].nodePort}"]
+  register: argocd_gateway_nodeport
+  changed_when: false
+
+- name: Show the Argo CD Gateway URL
+  ansible.builtin.debug:
+    msg: "https://{{ argocd_gateway_hostname }}:{{ argocd_gateway_nodeport.stdout }}"

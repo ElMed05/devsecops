@@ -1,0 +1,107 @@
+---
+- name: Create the Argo CD manifest directory
+  ansible.builtin.file:
+    path: "{{ argocd_manifest_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download the pinned Argo CD chart
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/argoproj/argo-helm/releases/download/argo-cd-{{ argocd_chart_version }}/argo-cd-{{ argocd_chart_version }}.tgz
+    dest: "{{ argocd_manifest_directory }}/argo-cd-{{ argocd_chart_version }}.tgz"
+    checksum: "sha256:{{ argocd_chart_checksum }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: argocd_chart_archive
+
+- name: Render the Argo CD lab values
+  ansible.builtin.template:
+    src: values.yaml.j2
+    dest: "{{ argocd_manifest_directory }}/values.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+  register: argocd_values
+
+- name: Check whether the Argo CD release exists
+  ansible.builtin.command:
+    argv:
+      - helm
+      - status
+      - "{{ argocd_release_name }}"
+      - --namespace
+      - "{{ argocd_namespace }}"
+      - --kubeconfig
+      - "{{ argocd_kubeconfig }}"
+  register: argocd_release_status
+  changed_when: false
+  failed_when: false
+
+- name: Install or update Argo CD
+  ansible.builtin.command:
+    argv:
+      - helm
+      - upgrade
+      - --install
+      - "{{ argocd_release_name }}"
+      - "{{ argocd_manifest_directory }}/argo-cd-{{ argocd_chart_version }}.tgz"
+      - --namespace
+      - "{{ argocd_namespace }}"
+      - --create-namespace
+      - --values
+      - "{{ argocd_manifest_directory }}/values.yaml"
+      - --kubeconfig
+      - "{{ argocd_kubeconfig }}"
+      - --atomic
+      - --timeout
+      - 10m
+  when: >-
+    argocd_release_status.rc != 0 or
+    argocd_chart_archive.changed or
+    argocd_values.changed
+
+- name: Wait for Argo CD deployments
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig={{ argocd_kubeconfig }}
+      - --namespace={{ argocd_namespace }}
+      - wait
+      - --for=condition=Available
+      - deployment
+      - --all
+      - --timeout=300s
+  changed_when: false
+
+- name: Wait for the Argo CD application controller
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig={{ argocd_kubeconfig }}
+      - --namespace={{ argocd_namespace }}
+      - rollout
+      - status
+      - statefulset/argocd-application-controller
+      - --timeout=300s
+  changed_when: false
+
+- name: Read Argo CD pod status
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig={{ argocd_kubeconfig }}
+      - --namespace={{ argocd_namespace }}
+      - get
+      - pods
+      - -o
+      - wide
+  register: argocd_pod_status
+  changed_when: false
+
+- name: Show Argo CD pod status
+  ansible.builtin.debug:
+    var: argocd_pod_status.stdout_lines

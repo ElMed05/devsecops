@@ -1,0 +1,14 @@
+---
+kubernetes_os_packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gpg
+  - socat
+  - conntrack
+  - ebtables
+  - ethtool
+
+kubernetes_kernel_modules:
+  - overlay
+  - br_netfilter

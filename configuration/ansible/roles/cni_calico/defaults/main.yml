@@ -1,0 +1,3 @@
+---
+calico_version: v3.32.1
+calico_manifest_directory: /etc/kubernetes/addons/calico

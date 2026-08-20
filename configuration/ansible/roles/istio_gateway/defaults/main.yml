@@ -1,0 +1,8 @@
+---
+istio_version: 1.30.3
+istio_namespace: istio-system
+istio_gateway_namespace: istio-ingress
+istio_kubeconfig: /etc/kubernetes/admin.conf
+istio_manifest_directory: /etc/kubernetes/addons/istio
+argocd_gateway_hostname: argocd.lab.local
+argocd_gateway_tls_secret: argocd-lab-tls

@@ -1,0 +1,45 @@
+---
+- name: Check whether the worker is already joined
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubernetes_worker_kubelet_config
+
+- name: Generate a short-lived worker join command
+  ansible.builtin.command:
+    argv:
+      - kubeadm
+      - token
+      - create
+      - --ttl=30m
+      - --print-join-command
+  delegate_to: "{{ groups['control_plane'][0] }}"
+  register: kubernetes_join_command
+  changed_when: false
+  no_log: true
+  when: not kubernetes_worker_kubelet_config.stat.exists
+
+- name: Join the worker to the Kubernetes cluster
+  ansible.builtin.command: >-
+    {{ kubernetes_join_command.stdout }}
+    --node-name {{ inventory_hostname }}
+    --cri-socket unix:///run/containerd/containerd.sock
+  args:
+    creates: /etc/kubernetes/kubelet.conf
+  no_log: true
+  when: not kubernetes_worker_kubelet_config.stat.exists
+
+- name: Assign the worker role label
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig=/etc/kubernetes/admin.conf
+      - label
+      - node
+      - "{{ inventory_hostname }}"
+      - node-role.kubernetes.io/worker=worker
+      - --overwrite
+  delegate_to: "{{ groups['control_plane'][0] }}"
+  register: kubernetes_worker_role_label
+  changed_when:
+    - "'labeled' in kubernetes_worker_role_label.stdout"
+    - "'not labeled' not in kubernetes_worker_role_label.stdout"

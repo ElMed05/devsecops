@@ -1,0 +1,7 @@
+---
+argocd_chart_version: 10.3.2
+argocd_chart_checksum: 33fc29ad7e0e1b2116e9d2ba4079e18619efde844f9a7cd3dbe74bfc7b9bc4c2
+argocd_namespace: argocd
+argocd_release_name: argocd
+argocd_manifest_directory: /etc/kubernetes/addons/argocd
+argocd_kubeconfig: /etc/kubernetes/admin.conf

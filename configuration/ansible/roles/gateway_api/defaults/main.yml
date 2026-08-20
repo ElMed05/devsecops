@@ -1,0 +1,5 @@
+---
+gateway_api_version: v1.6.1
+gateway_api_checksum: 24d931f22abd8e40c973264319ead7cfa09d0fb7716b7ab1ee2ff174cb063a73
+gateway_api_manifest_directory: /etc/kubernetes/addons/gateway-api
+gateway_api_kubeconfig: /etc/kubernetes/admin.conf

@@ -1,0 +1,40 @@
+---
+- name: Create the Gateway API manifest directory
+  ansible.builtin.file:
+    path: "{{ gateway_api_manifest_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download the pinned Gateway API standard CRDs
+  ansible.builtin.get_url:
+    url: "https://github.com/kubernetes-sigs/gateway-api/releases/download/{{ gateway_api_version }}/standard-install.yaml"
+    dest: "{{ gateway_api_manifest_directory }}/standard-install-{{ gateway_api_version }}.yaml"
+    checksum: "sha256:{{ gateway_api_checksum }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply the Gateway API standard CRDs
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig={{ gateway_api_kubeconfig }}
+      - apply
+      - --server-side
+      - -f
+      - "{{ gateway_api_manifest_directory }}/standard-install-{{ gateway_api_version }}.yaml"
+  register: gateway_api_apply
+  changed_when: "'configured' in gateway_api_apply.stdout or 'created' in gateway_api_apply.stdout"
+
+- name: Wait for the Gateway CRD
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - --kubeconfig={{ gateway_api_kubeconfig }}
+      - wait
+      - --for=condition=Established
+      - crd/gateways.gateway.networking.k8s.io
+      - --timeout=120s
+  changed_when: false
