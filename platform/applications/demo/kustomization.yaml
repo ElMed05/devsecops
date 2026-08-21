@@ -7,6 +7,9 @@ resources:
   - deployment.yaml
   - service.yaml
   - httproute.yaml
+  - networkpolicy-default-deny.yaml
+  - networkpolicy-allow-gateway.yaml
+  - networkpolicy-allow-dns.yaml
 labels:
   - pairs:
       app.kubernetes.io/part-of: devsecops-lab
