@@ -88,6 +88,40 @@
   changed_when: "'configured' in argocd_gateway_tls_apply.stdout or 'created' in argocd_gateway_tls_apply.stdout"
   no_log: true
 
+- name: Generate the demo lab TLS private key
+  ansible.builtin.command:
+    argv: [openssl, genrsa, -out, "{{ istio_manifest_directory }}/demo-lab.key", "2048"]
+    creates: "{{ istio_manifest_directory }}/demo-lab.key"
+  no_log: true
+
+- name: Protect the demo lab TLS private key
+  ansible.builtin.file:
+    path: "{{ istio_manifest_directory }}/demo-lab.key"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Generate the demo lab TLS certificate
+  ansible.builtin.command:
+    argv: [openssl, req, -x509, -new, -nodes, -key, "{{ istio_manifest_directory }}/demo-lab.key", -sha256, -days, "825", -out, "{{ istio_manifest_directory }}/demo-lab.crt", -subj, "/CN={{ demo_gateway_hostname }}", -addext, "subjectAltName=DNS:{{ demo_gateway_hostname }}"]
+    creates: "{{ istio_manifest_directory }}/demo-lab.crt"
+
+- name: Render the demo gateway TLS secret
+  ansible.builtin.command:
+    argv: [kubectl, "--kubeconfig={{ istio_kubeconfig }}", --namespace, "{{ istio_gateway_namespace }}", create, secret, tls, "{{ demo_gateway_tls_secret }}", "--cert={{ istio_manifest_directory }}/demo-lab.crt", "--key={{ istio_manifest_directory }}/demo-lab.key", --dry-run=client, -o, yaml]
+  register: demo_gateway_tls_yaml
+  changed_when: false
+  no_log: true
+
+- name: Apply the demo gateway TLS secret
+  ansible.builtin.command:
+    argv: [kubectl, "--kubeconfig={{ istio_kubeconfig }}", apply, -f, -]
+    stdin: "{{ demo_gateway_tls_yaml.stdout }}"
+  register: demo_gateway_tls_apply
+  changed_when: "'configured' in demo_gateway_tls_apply.stdout or 'created' in demo_gateway_tls_apply.stdout"
+  no_log: true
+
 - name: Render the Argo CD Gateway API resources
   ansible.builtin.template:
     src: argocd-gateway.yaml.j2
@@ -123,3 +157,7 @@
 - name: Show the Argo CD Gateway URL
   ansible.builtin.debug:
     msg: "https://{{ argocd_gateway_hostname }}:{{ argocd_gateway_nodeport.stdout }}"
+
+- name: Show the demo Gateway URL
+  ansible.builtin.debug:
+    msg: "https://{{ demo_gateway_hostname }}:{{ argocd_gateway_nodeport.stdout }}"

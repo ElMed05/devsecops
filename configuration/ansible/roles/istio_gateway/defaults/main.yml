@@ -6,3 +6,5 @@ istio_kubeconfig: /etc/kubernetes/admin.conf
 istio_manifest_directory: /etc/kubernetes/addons/istio
 argocd_gateway_hostname: argocd.lab.local
 argocd_gateway_tls_secret: argocd-lab-tls
+demo_gateway_hostname: demo.lab.local
+demo_gateway_tls_secret: demo-lab-tls

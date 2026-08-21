@@ -24,3 +24,7 @@ kubectl kustomize platform/clusters/lab
 Die Root-Application verwendet das private Repository
 `git@github.com:ElMed05/devsecops.git`. Ihre erste Synchronisierung bleibt
 bewusst manuell, damit der von Argo CD erkannte Diff vorab geprüft werden kann.
+
+Die Demo-Anwendung wird über die bestehende Istio-Gateway-Adresse unter
+`https://demo.lab.local:30959` veröffentlicht. Auf dem Client muss
+`demo.lab.local` auf einen Kubernetes-Node zeigen.

@@ -1,0 +1,16 @@
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: demo-web
+spec:
+  parentRefs:
+    - name: lab-gateway
+      namespace: istio-ingress
+      sectionName: demo-https
+  hostnames:
+    - demo.lab.local
+  rules:
+    - backendRefs:
+        - name: demo-web
+          port: 80
